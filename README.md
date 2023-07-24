@@ -1,7 +1,13 @@
-# Xiao Sense BT 
+# Motion Signals
 
-  This repo connects uses a seeed studio sense to provide streaming measurements of accelerometer and gyro data from the on board IMU.  The data can be received by any BLE compatible host.
+This Repo provides some tools for looking at IMU (Intertial Measurement Unit Data) consisting of accelerometer / gyro / and magnetometer readings to assess motion.  Also included are some utlities for examining AHRS (Attitude Heading Referance Systems) code.
 
+The repo contains utilties for using smartphone only data or connecting an embedded board which has IMU sensors onboard.
+
+
+## Using With the Seeed Studio Xiao BLE Sense
+
+  Firmware in this repo connects uses a seeed studio sense to provide streaming measurements of accelerometer and gyro data from the on board IMU.  The data can be received by any BLE compatible host.
 
 To make this repo work you must build and flash the firmware and then capture the data over BLE.
 
@@ -39,15 +45,14 @@ run with python 3.6_
 cd app
 python3 -m http.server 8000 
 ```
+open localhost:8000/index.html in the chrome or Edge browser (chrome supports BLE extensions uses)
+
 
 or run with nodejs
 ```sh
 cd app
 npx serve
 ```
-
-open localhost:8080/index.html in the chrome browser (chrome supports BLE extensions uses)
-
 
 
 ## Electrical Design
@@ -56,7 +61,8 @@ The hardware is based on the Nordic NRF52840 BLE system on chip with support for
 All programming and charging take place over a USB-C connection.
 
 ## Revision history
-June 2022 - M A Chatterjee - initial fw, webpage, hw design
+Jul  2023 - M A Chatterjee - clean up files switch to chartjs
+Jun  2022 - M A Chatterjee - initial fw, webpage, hw design
 Aug  2022 - M A Chatterjee - clean up checking to git
 
 
