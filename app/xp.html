@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<!---- 
+sense
+  v0.1
+  M A Chatterjee 15 Jun 2022 - initial
+                 
+-->
+<html>
+<head>
+<title>Motion Sense</title>
+<!-- locals -->
+<link rel="icon"  href="./assets/favicon.ico"/>
+<script src="./js/bitwrench.min.js" ></script>
+<script src="./js/p5.ble.min.js" ></script>
+<script src="./js/chartjs-4.3.0-umd.js"></script> 
+<script src="./js/chartjs-helpers.js"></script> 
+
+<style>
+html {  
+  margin: 0; 
+  padding :0; 
+  width: 100%; 
+  height: 100%; 
+  overflow: hidden;
+}
+
+body {  
+  color: black; 
+  background-color: rgb(10, 93, 177); 
+  overflow: hidden
+}
+
+.widget {
+  color: #111;
+  height: 98%;
+  background: #111111;
+  border: 1px solid #000000;
+  border-radius: 7px;
+  padding: 12px;
+  margin: 6px;
+  float: left;
+}
+
+.label {
+height: 15px;
+display: inline;
+font-size: 15px;
+}
+
+.statusRow {
+  width: 100%;
+  height: 10vh;
+  padding-top: 1%;
+}
+.defHeight {
+  height: 33vh;
+}
+
+.logo_x {
+  height : 5vh;
+}
+
+.label {
+  height: 20px;
+  display: inline;
+  font-size: 17px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  color : #ddd;
+}
+
+.plus {
+  font-size: 1.8rem;
+}
+
+.textGraph  {
+  height: 92%;
+  background-color: #eee;
+  padding: 1vh;
+}
+
+</style>
+</head>
+<body class="bw-def-page-setup bw-font-sans-serif">
+  <div class="bw-container">
+    <div class="bw-row">
+            <div  style="padding-left:5px; padding-top:2vh;">
+            </div>
+      <br>      
+      <div class="label plus">&nbsp;Motion Sense</div>
+      <br>
+      <br>
+    </div>
+    <div class="bw-row">
+    
+      <div class=" widget">      
+        <button onclick="connectAndStartNotify()">Connect</button>
+        <button onclick="stopNotifications()">Disconnect</button>
+        <button onclick="saveData()">Export Data</button>
+        <div class="label" id="time"></div>
+      </div>
+      
+      <br>
+    </div>  
+    <!--- first row of widgets -->
+    <div class="bw-row defHeight">
+      <div class="widget bw-col-4">
+        <div class="label">Acceleration: (x,y,z) in g</div>
+        <canvas id="acclGraphDiv"></canvas>
+      </div>
+
+      <div class="widget bw-col-4">
+        <div class="label">Accelerometer : Magnitude in g</div>
+        <canvas id="acclMagGraphDiv" ></canvas>
+      </div>
+      <div class="widget bw-col-2">
+        <div class="label">Raw Accl</div>
+        <div id="rawAcclDiv" class="textGraph bw-right"></div>
+      </div>
+      
+    </div>
+    <!-- 2nd row of widgets -->
+    <div class="bw-row defHeight">
+      
+      <div class="widget bw-col-4">
+        <div class="label">Gyroscope: (x,y,z) in deg / s </div>
+        <canvas id="gyroGraphDiv" class="lineGraph"></canvas>
+      </div>
+
+      <div class="widget bw-col-4">
+        <div class="label">Gyroscope : Magnitude in deg / s</div>
+        <canvas id="gyroMagGraphDiv" class="lineGraph"></canvas>
+      </div>
+   <div class="widget bw-col-2">
+        <div class="label">Raw Gyro</div>
+        <div id="rawGyroDiv" class="textGraph bw-right"></div>
+      </div>
+    </div>
+  </div> <!-- bw-container -->
+</body> 
+
+<script type="text/javascript">
+  const l = 20;
+  const maxlen = 300;
+
+  
+  let c0 = newChartJSLineChart("#acclGraphDiv",3,"Accel",maxlen,[-5,5]);
+  let c1 = newChartJSLineChart("#acclMagGraphDiv",1,"Accel",maxlen, [0,7]);
+  let c2 = newChartJSLineChart("#gyroGraphDiv",3,"Gyro",maxlen, [-400,400]);
+  let c3 = newChartJSLineChart("#gyroMagGraphDiv",1,"Gyro",maxlen,[0,600]);
+
+// these items must match from the embedded C++ firmware
+var deviceName   = "xp_sense_ble";
+
+var serviceUUID  = "19701201-0000-ab15-cd17-1f3e5d7e2020";
+var acclCharUUID = "19701201-4001-ab15-cd17-1f3e5d7e2020";
+var gyroCharUUID = "19701201-5001-ab15-cd17-1f3e5d7e2020";
+var magsCharUUID = "19701201-6001-ab15-cd17-1f3e5d7e2020";
+
+/*
+var serviceUUID  = "9facede2-0000-1971-2021-201520172022";
+var acclCharUUID = "9facede2-7001-1971-2021-201520172022";
+var gyroCharUUID = "9facede2-8001-1971-2021-201520172022";
+*/
+
+// to do add other communication items
+
+// page vars 
+let accelerationCharacteristic;
+let gyroscopeCharacteristic;
+
+let gStoredData = {
+    pageLoadTimeStamp    : new Date(),
+    startTimeStamp       : Date.now(), 
+    connected : false,
+    maxEntries      : 60 * 60 * 50 * 10,
+    data            : []
+};
+
+let gGraphVars = {
+  acclCnt : 0,
+  gyroCnt : 0,
+  magsCnt : 0    // some devices like Arduino Nano BLE and Adafruit Feather Sense support mags
+}
+
+let webBLEConn = new p5ble();
+
+//============================================
+/*
+function setup() {
+  webBLEConn = new p5ble();
+}
+setup();
+*/
+
+function connectAndStartNotify() {
+   webBLEConn.connect({
+     filters: [{
+       services: [serviceUUID],
+     }, {
+      name:deviceName
+     }]
+   }, useCharacteristics)
+}
+
+// A function that will be called once got characteristics
+function useCharacteristics(error, characteristics) {
+  if (error) console.log('error: ', error);
+  console.log(characteristics);
+  if (characteristics) {
+    for (let i = 0; i < characteristics.length; i++) {
+        if (gStoredData.connected == false)
+          gStoredData.startTimeStamp = Date.now();
+
+        if (characteristics[i].uuid == acclCharUUID) {
+          accelerationCharacteristic = characteristics[i];
+          webBLEConn.startNotifications(accelerationCharacteristic, handleAcceleration, 'custom');
+          gStoredData.connected = true;
+        } else if (characteristics[i].uuid == gyroCharUUID) {
+          gyroscopeCharacteristic = characteristics[i];
+          webBLEConn.startNotifications(gyroscopeCharacteristic, handleGyroscope, 'custom');
+          gStoredData.connected = true;
+        } else {
+          console.log("unused charactersistic :", characteristics[i]);
+        }
+        
+    }
+  }
+}
+
+function stopNotifications() {
+  webBLEConn.disconnect();
+}
+
+// A function that will be called once got characteristics
+
+function handleAcceleration(data) {
+  let d = [
+    data.getFloat32(0, true), // ax
+    data.getFloat32(4, true), // ay
+    data.getFloat32(8, true)  // az
+  ];
+  let mag = Math.sqrt(d.reduce( (s,x)=> s+(x*x), 0));
+  
+  storeData( d, "a");  // for saving session data
+  gGraphVars.acclCnt++;
+  
+  bw.DOM("#a-count","accl-ev: "+  gGraphVars.acclCnt)
+
+  if (gGraphVars.acclCnt ) {
+    c0.updateChart(d,false);
+    c1.updateChart([mag],false);
+  }
+  d.push(mag);
+  let c="count:"+gGraphVars.acclCnt + "<br><br>"
+  
+  bw.DOM("#rawAcclDiv", c+  d.map(x=>Number.parseFloat(x).toFixed(3)).join("<br>" ));
+ 
+  //update3d(d);
+}
+
+function handleGyroscope(data) {
+   let d = [
+    data.getFloat32(0, true), // gx
+    data.getFloat32(4, true), // gy
+    data.getFloat32(8, true)  // gz
+  ];
+  let mag = Math.sqrt(d.reduce( (s,x)=> s+(x*x), 0));
+  
+  storeData( d, "g"); // for saving session data
+  gGraphVars.gyroCnt++;
+  if (gGraphVars.gyroCnt ) {
+    c2.updateChart(d,false);
+    c3.updateChart([mag],false);
+ 
+  }
+  
+  d.push(mag);
+  let c="count:"+gGraphVars.gyroCnt + "<br><br>"
+  bw.DOM("#rawGyroDiv", c+ d.map(x=>Number.parseFloat(x).toFixed(3)).join("<br>"));
+ 
+}
+
+function storeData(data, dtype) {
+  
+    gStoredData.data.push(
+        [
+            Date.now(),
+            dtype,
+            ...data
+        ]
+    )
+    if (gStoredData.data.length > gStoredData.maxEntries)
+        gStoredData.data.shift(); // drops first element
+        
+}
+function saveData() {
+    // creates a time-stamped file to store on client computer
+    let exportData  = JSON.stringify(gStoredData, function(key, value) {
+        // limit precision of floats
+        if (typeof value === 'number') {
+            return parseFloat(value.toFixed(4));
+        }
+        return value;
+    });
+    bw.saveClientFile("Hand-Sense-"+ (new Date()).toISOString()+".json", exportData);
+}
+
+setInterval (()=>{ 
+      gStoredData["intervalTimeStamp"] = Date.now();
+      if (gStoredData.connected) {
+        let s = "&nbsp; sec elapsed: " +((gStoredData.intervalTimeStamp - gStoredData.startTimeStamp)/1000 ).toFixed(2);
+        s+= "&nbsp;&nbsp; acc_ev / s : " + (gGraphVars.acclCnt/((gStoredData.intervalTimeStamp - gStoredData.startTimeStamp)/1000)).toFixed(2);
+        bw.DOM("#time",s);
+        c0.update();
+        c1.update();
+        c2.update();
+        c3.update();
+    }
+    }, 100);
+
+// =======================================
+// 3d model
+var renderer = new THREE.WebGLRenderer();
+var scene    = new THREE.Scene();
+var camera   = new THREE.PerspectiveCamera(75, 1, 1, 100);
+//==
+function init3D(){
+  var container = document.getElementById( 'modelDiv' );
+  var loader = new THREE.GLTFLoader();
+  scene.background = new THREE.Color( 0xcccccc );
+
+  renderer.setSize( container.offsetWidth, container.offsetHeight );
+  renderer.setPixelRatio( 1 );
+  container.appendChild( renderer.domElement );
+  
+  loader.load( "./assets/hand/scene.gltf",
+  
+  function ( gltf ) {
+
+    // Model
+    handModel = gltf.scene;
+    scene.add(handModel);
+
+    var sphereSize = 1;
+
+    // Light
+    const color = 0xaa5;
+    const intensity = 50;
+    const light  = new THREE.DirectionalLight(color, intensity);
+    const light2 = new THREE.DirectionalLight(color, intensity);
+    
+    light.position.set(-20, -20, -20);
+    light.target.position.set(0, 0, 0);
+    
+    scene.add(light);
+    scene.add(light.target);
+    
+    light2.position.set(20, 20, 20);
+    light2.target.position.set(0, 0, 0);
+    
+    scene.add(light2);
+    scene.add(light2.target);
+    
+    // Camera
+    const zoom = 2.4;
+    camera.position.set (10*zoom,-10*zoom,10*zoom );
+
+    camera.rotation.z = Math.PI; // 180
+    camera.lookAt(new THREE.Vector3(5,5,0));
+    renderer.render(scene, camera);
+  }
+);
+}
+//init3D();
+var Ax=0,Ay=0,Az=0;
+let alpha = 0.667; // a small IIR to filter out edges for rendering
+function update3d(accl){
+    var c = 0.0174533; // deg / radian
+    Ax = (accl[0] * c * (1-alpha))+ (Ax * alpha);
+    Ay = (accl[1] * c * (1-alpha))+ (Ay * alpha);
+    Az = (accl[2] * c * (1-alpha))+ (Az * alpha);
+    var pitch = Math.atan2((-Ax) , Math.sqrt(Ay * Ay + Az * Az));
+    var roll  = Math.atan2(Ay , Az);
+    var yaw   = 0 ;
+    handModel.rotation.x = roll;
+    handModel.rotation.y = yaw;
+    handModel.rotation.z = pitch;
+    renderer.render(scene, camera);
+}
+//===
+
+
+  </script>
+  </html>
