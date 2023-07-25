@@ -189,22 +189,13 @@ setup();
 */
 
 function connectAndStartNotify() {
-
-/*  const device = await navigator.bluetooth.requestDevice({
-    filters : [
-      {name:deviceName,
-      services: [acclCharUUID,gyroCharUUID]}]
-  });
-*/
-  
    webBLEConn.connect({
      filters: [{
-       services: [serviceUUID,acclCharUUID,gyroCharUUID],
+       services: [serviceUUID],
      }, {
       name:deviceName
      }]
    }, useCharacteristics)
-   
 }
 
 // A function that will be called once got characteristics

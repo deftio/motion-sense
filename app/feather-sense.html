@@ -157,7 +157,6 @@ var acclCharUUID = "19701201-4001-ab15-cd17-1f3e5d7e2020";
 var gyroCharUUID = "19701201-5001-ab15-cd17-1f3e5d7e2020";
 var magsCharUUID = "19701201-6001-ab15-cd17-1f3e5d7e2020";
 
-
 // to do add other communication items
 
 // page vars 
@@ -189,22 +188,13 @@ setup();
 */
 
 function connectAndStartNotify() {
-
-/*  const device = await navigator.bluetooth.requestDevice({
-    filters : [
-      {name:deviceName,
-      services: [acclCharUUID,gyroCharUUID]}]
-  });
-*/
-  
    webBLEConn.connect({
      filters: [{
-       services: [serviceUUID,acclCharUUID,gyroCharUUID],
+       services: [serviceUUID],
      }, {
       name:deviceName
      }]
    }, useCharacteristics)
-   
 }
 
 // A function that will be called once got characteristics
